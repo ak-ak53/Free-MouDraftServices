@@ -1,131 +1,178 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>MOU Draft Editor | Vault</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-  <!-- PDF Library -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-
+  <meta charset="UTF-8" />
+  <title>Vault – Free MOU Drafter</title>
   <style>
-    body {
-      margin:0;
-      font-family: Arial, sans-serif;
-      background:#f5f8fd;
-      color:#102a43;
-    }
-
-    .nav {
-      background:white;
-      padding:16px 30px;
-      font-weight:bold;
-      box-shadow:0 2px 10px rgba(0,0,0,0.05);
-    }
-
-    .container {
-      display:flex;
-      padding:30px;
-      gap:20px;
-    }
-
-    .editor, .preview {
-      background:white;
-      padding:20px;
-      border-radius:10px;
-      width:50%;
-      box-shadow:0 10px 20px rgba(0,0,0,0.1);
-    }
-
-    input {
-      width:100%;
-      padding:8px;
-      margin-bottom:10px;
-      border:1px solid #ddd;
-      border-radius:6px;
-    }
-
-    button {
-      background:#3557f2;
-      color:white;
-      border:none;
-      padding:10px 15px;
-      border-radius:6px;
-      cursor:pointer;
-      margin-top:10px;
-      width:100%;
-    }
+    body { font-family: Arial, sans-serif; margin: 24px; }
+    h2 { margin-top: 32px; }
+    label { display: block; margin-top: 12px; }
+    input, textarea, select { width: 100%; padding: 8px; margin-top: 4px; }
+    textarea { min-height: 120px; }
+    button { margin-top: 24px; padding: 12px 20px; }
+    .party { border: 1px solid #ccc; padding: 16px; margin-top: 16px; }
+    pre { white-space: pre-wrap; background: #f6f6f6; padding: 16px; }
   </style>
 </head>
 <body>
 
-<div class="nav">VAULT – MOU Draft</div>
+<h1>Vault – Free MOU Drafter (MVP)</h1>
 
-<div class="container">
+<h2>1. Date</h2>
+<label>Date in words</label>
+<input id="dateWords" />
 
-  <!-- LEFT: FORM -->
-  <div class="editor">
-    <h3>Fill Details</h3>
+<label>Date in numbers</label>
+<input id="dateNumbers" placeholder="DD/MM/YYYY" />
 
-    <input id="buyer" placeholder="Buyer Name">
-    <input id="seller" placeholder="Seller Name">
-    <input id="property" placeholder="Property Address">
-    <input id="amount" placeholder="Amount">
-    <input id="date" placeholder="Date">
+<h2>2. BETWEEN Clause</h2>
+<label>Number of Parties</label>
+<input type="number" id="betweenCount" min="1" value="2" />
+<button onclick="renderBetween()">Add Parties</button>
+<div id="betweenParties"></div>
 
-    <button onclick="updateDraft()">Update Draft</button>
-    <button onclick="downloadPDF()">Download PDF</button>
-  </div>
+<h2>3. AND Clause</h2>
+<label>Number of Parties</label>
+<input type="number" id="andCount" min="1" value="2" />
+<button onclick="renderAnd()">Add Parties</button>
+<div id="andParties"></div>
 
-  <!-- RIGHT: PREVIEW -->
-  <div class="preview" id="draft">
-    <h2 style="text-align:center">MEMORANDUM OF UNDERSTANDING</h2>
+<h2>4. WHEREAS – Schedule C Extract</h2>
+<textarea id="scheduleCExtract" placeholder="Paste Schedule C text from Sale Deed"></textarea>
 
-    <p>
-      This Memorandum of Understanding is made on
-      <b id="d_date">[Date]</b> between
-      <b id="d_seller">[Seller]</b> (Seller) and
-      <b id="d_buyer">[Buyer]</b> (Buyer).
-    </p>
+<h2>5. Sale Consideration</h2>
+<label>Amount (Numbers)</label>
+<input id="saleAmount" oninput="convertAmount()" />
 
-    <p>
-      The Seller agrees to sell the property located at
-      <b id="d_property">[Property Address]</b>
-      for a total consideration of ₹<b id="d_amount">[Amount]</b>.
-    </p>
+<label>Amount (Words – auto)</label>
+<input id="saleAmountWords" readonly />
 
-    <p>
-      Both parties agree to the terms and conditions stated herein.
-    </p>
+<h2>7. Payment Terms & Standard MOU Body</h2>
+<label>Total Consideration (Number)</label>
+<input id="totalConsideration" />
 
-    <br>
-    <p>Seller Signature: ____________________</p>
-    <p>Buyer Signature: ____________________</p>
-  </div>
+<label>Total Consideration (Words)</label>
+<input id="totalConsiderationWords" />
 
-</div>
+<label>Number of Payment Tranches</label>
+<input type="number" id="paymentCount" min="1" value="1" />
+<button onclick="renderPayments()">Add Payments</button>
+<div id="payments"></div>
+
+<p><strong>Note:</strong> Arbitration, jurisdiction, back-out clauses and standard legal text will be auto-inserted as fixed content.</p>
+
+<h2>8. Schedule A</h2>
+<textarea id="scheduleA"></textarea>
+
+<h2>9. Schedule B</h2>
+<textarea id="scheduleB"></textarea>
+
+<h2>10. Schedule C</h2>
+<textarea id="scheduleC"></textarea>
+
+<button onclick="generateMOU()">Generate MOU</button>
+
+<h2>Generated MOU Preview</h2>
+<pre id="output"></pre>
 
 <script>
-function updateDraft(){
-  d_buyer.innerText = buyer.value || "[Buyer]";
-  d_seller.innerText = seller.value || "[Seller]";
-  d_property.innerText = property.value || "[Property]";
-  d_amount.innerText = amount.value || "[Amount]";
-  d_date.innerText = date.value || "[Date]";
+function renderPayments() {
+  const count = document.getElementById('paymentCount').value;
+  const div = document.getElementById('payments');
+  div.innerHTML = '';
+  for (let i = 1; i <= count; i++) {
+    div.innerHTML += `
+      <div class="party">
+        <label>Amount (Rs.)</label><input />
+        <label>Amount (Words)</label><input />
+        <label>Payment Date</label><input />
+        <label>Payment Mode</label><input />
+        <label>Transaction ID</label><input />
+      </div>`;
+  }
 }
 
-function downloadPDF(){
-  let phone = prompt("Enter your phone number to download the draft");
+function mask(value) {
+  if (!value) return '';
+  return value.slice(0, -4).replace(/./g, 'X') + value.slice(-4);
+}
 
-  if(!phone){
-    alert("Phone number is required");
-    return;
+function renderBetween() {
+  const count = document.getElementById('betweenCount').value;
+  const div = document.getElementById('betweenParties');
+  div.innerHTML = '';
+  for (let i = 1; i <= count; i++) {
+    div.innerHTML += partyTemplate(`between_${i}`);
   }
+}
 
-  // Here you can later send phone to backend / Google Sheet
+function renderAnd() {
+  const count = document.getElementById('andCount').value;
+  const div = document.getElementById('andParties');
+  div.innerHTML = '';
+  for (let i = 1; i <= count; i++) {
+    div.innerHTML += partyTemplate(`and_${i}`);
+  }
+}
 
-  html2pdf()
-    .from(document.getElementById("draft"))
-    .save("MOU-Draft.pdf");
+function partyTemplate(prefix) {
+  return `
+  <div class="party">
+    <label>Name</label><input id="${prefix}_name" />
+    <label>S/O</label><input id="${prefix}_so" />
+    <label>Aged</label><input id="${prefix}_age" />
+    <label>Address</label><textarea id="${prefix}_address"></textarea>
+    <label>Aadhar</label><input id="${prefix}_aadhar" />
+    <label>PAN</label><input id="${prefix}_pan" />
+  </div>`;
+}
+
+function convertAmount() {
+  const num = document.getElementById('saleAmount').value;
+  document.getElementById('saleAmountWords').value = numberToWords(num);
+}
+
+function numberToWords(num) {
+  if (!num) return '';
+  return num + ' (convert-to-words logic can be extended)';
+}
+
+function generateMOU() {
+  let text = '';
+  text += `This Memorandum of Understanding is executed on ${dateWords.value} (${dateNumbers.value}).\n\n`;
+
+  text += `BETWEEN:\n`;
+  document.querySelectorAll('#betweenParties .party').forEach(p => {
+    const a = p.querySelectorAll('input, textarea');
+    text += `${a[0].value}, S/O ${a[1].value}, Aged ${a[2].value}, Address: ${a[3].value}, Aadhar: ${mask(a[4].value)}, PAN: ${mask(a[5].value)}\n\n`;
+  });
+
+  text += `AND:\n`;
+  document.querySelectorAll('#andParties .party').forEach(p => {
+    const a = p.querySelectorAll('input, textarea');
+    text += `${a[0].value}, S/O ${a[1].value}, Aged ${a[2].value}, Address: ${a[3].value}, Aadhar: ${mask(a[4].value)}, PAN: ${mask(a[5].value)}\n\n`;
+  });
+
+  text += `WHEREAS the Vendors are fully competent to enter into an agreement with respect to the following property:\n`;
+  text += `${scheduleCExtract.value}\n\n`;
+
+  text += `NOW THIS MOU WITNESSED AND IS HEREBY AGREED AS FOLLOWS:\n`;
+  text += `That the Purchasers have agreed to pay the total consideration of Rs. ${totalConsideration.value} (${totalConsiderationWords.value}) in the following manner:\n\n`;
+
+  document.querySelectorAll('#payments .party').forEach((p, i) => {
+    const a = p.querySelectorAll('input');
+    text += `${i + 1}. Rs. ${a[0].value} (${a[1].value}) on ${a[2].value} via ${a[3].value}, Transaction ID: ${a[4].value}.\n`;
+  });
+
+  text += `\nARBITRATION: Any dispute shall be referred to arbitration under the Arbitration and Conciliation Act, 1996. Place of arbitration: Bangalore.\n\n`;
+  text += `This MOU shall be governed by the laws of India and courts at Bangalore shall have exclusive jurisdiction.\n\n`;
+
+  text += `Schedule A:\n${scheduleA.value}\n\n`;
+  text += `Schedule B:\n${scheduleB.value}\n\n`;
+  text += `Schedule C:\n${scheduleC.value}`;
+
+  document.getElementById('output').innerText = text;
+}
 }
 </script>
 
